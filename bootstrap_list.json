@@ -1,0 +1,3 @@
+[
+    "/ip4/<BOOTSTRAP_IP>/tcp/60001/p2p/<BOOTSTRAP_PEER_ID>"
+]

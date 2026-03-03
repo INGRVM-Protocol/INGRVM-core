@@ -1,0 +1,12 @@
+{
+    "id": "ghost_intent",
+    "name": "Ghost Intent",
+    "version": "0.1.0",
+    "category": "General",
+    "description": "Initial scaffold for Ghost Intent",
+    "architecture": {
+        "num_inputs": 100,
+        "num_hidden": 64,
+        "num_outputs": 10
+    }
+}

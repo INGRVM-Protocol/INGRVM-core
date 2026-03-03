@@ -1,0 +1,74 @@
+{
+    "12D3KooW_MOCK_PEER_ALPHA": {
+        "peer_id": "12D3KooW_MOCK_PEER_ALPHA",
+        "last_seen": 1771888314.674421,
+        "total_spikes_processed": 150,
+        "reputation": 0.66975,
+        "tokens_earned": 931.4585,
+        "is_validator": false
+    },
+    "12D3KooW_PC_BACKBONE": {
+        "peer_id": "12D3KooW_PC_BACKBONE",
+        "last_seen": 1771888314.674421,
+        "total_spikes_processed": 0,
+        "reputation": 0.665,
+        "tokens_earned": 4876.3069,
+        "is_validator": false
+    },
+    "12D3KooW_PIXEL_8": {
+        "peer_id": "12D3KooW_PIXEL_8",
+        "last_seen": 1771888314.674421,
+        "total_spikes_processed": 0,
+        "reputation": 0.665,
+        "tokens_earned": 1204.7346,
+        "is_validator": false
+    },
+    "12D3KooW_BAD_ACTOR": {
+        "peer_id": "12D3KooW_BAD_ACTOR",
+        "last_seen": 1771827270.4617448,
+        "total_spikes_processed": 1000,
+        "reputation": 0.1,
+        "tokens_earned": 460.0,
+        "is_validator": false
+    },
+    "12D3KooW_HONEST_WHALE": {
+        "peer_id": "12D3KooW_HONEST_WHALE",
+        "last_seen": 1771828331.5862045,
+        "total_spikes_processed": 1000,
+        "reputation": 0.66975,
+        "tokens_earned": 5000.0,
+        "is_validator": false
+    },
+    "12D3KooW_STALE_PEER": {
+        "peer_id": "12D3KooW_STALE_PEER",
+        "last_seen": 1771832151.3373797,
+        "total_spikes_processed": 0,
+        "reputation": 0.665,
+        "tokens_earned": 0.0,
+        "is_validator": false
+    },
+    "12D3KooW_VETERAN_ARCHITECT": {
+        "peer_id": "12D3KooW_VETERAN_ARCHITECT",
+        "last_seen": 1771832909.9536245,
+        "total_spikes_processed": 5000,
+        "reputation": 0.9547499999999999,
+        "tokens_earned": 1000.0,
+        "is_validator": false
+    },
+    "4QbWtbA6DrtI/dc0h+9iX+73vuiLS+RReHZf9nEVNlc=": {
+        "peer_id": "4QbWtbA6DrtI/dc0h+9iX+73vuiLS+RReHZf9nEVNlc=",
+        "last_seen": 1771898896.4095333,
+        "total_spikes_processed": 200,
+        "reputation": 0.9594999999999998,
+        "tokens_earned": 2.0,
+        "is_validator": false
+    },
+    "LOCAL_OPERATOR": {
+        "peer_id": "LOCAL_OPERATOR",
+        "last_seen": 1772314512.1548266,
+        "total_spikes_processed": 1000,
+        "reputation": 1.005,
+        "tokens_earned": 0.0,
+        "is_validator": false
+    }
+}

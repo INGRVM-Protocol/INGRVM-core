@@ -7,46 +7,59 @@ from multiaddr import Multiaddr
 from libp2p.tools.async_service import background_trio_service
 
 from config import SynapseConfig
+from global_orchestrator import GlobalOrchestrator
 
 def print_f(*args, **kwargs):
     print(*args, **kwargs, flush=True)
 
 BEACON_ADDR_FILE = "neuromorphic_env/bootstrap_beacon_addr.txt"
 
-async def main():
+class BootstrapBeacon:
     """
-    The Lighthouse: A stable libp2p node that facilitates mesh discovery.
-    Running this on the PC provides a static target for the Laptop/Mobile nodes.
+    Phase 7 Task #11: The Auto-Seed Beacon.
+    Facilitates mesh discovery by connecting local nodes to 
+    global entry points.
     """
-    conf = SynapseConfig()
-    print_f("--- Starting Synapse Lighthouse (Bootstrap Relay) ---")
-    
-    # 1. Identity & Network
-    # Use config for IP and Port, default to a lighthouse-specific port if needed
-    # but for now we follow the mesh p2p_port.
-    lan_ip = conf.get("node", "lan_ip") or "0.0.0.0" 
-    p2p_port = 60000 # Keep 60000 for lighthouse specifically? 
-    # Actually, let's use a dedicated config key for lighthouse port if we want it fixed.
-    
-    listen_addr = Multiaddr(f"/ip4/{lan_ip}/tcp/{p2p_port}")
-    
-    host = new_host()
-    node_id = host.get_id().to_string()
-    
-    async with host.run(listen_addrs=[listen_addr]):
-        full_addr = f"/ip4/{lan_ip}/tcp/60000/p2p/{node_id}"
+    def __init__(self):
+        self.conf = SynapseConfig()
+        self.orchestrator = GlobalOrchestrator()
+        self.host = None
+
+    async def start(self):
+        print_f("--- Starting Calyx Auto-Seed Beacon (Lighthouse) ---")
         
-        # Save address so other nodes can find it
-        with open(BEACON_ADDR_FILE, "w") as f:
-            f.write(full_addr)
+        # 1. Sync Global Seeds (Task #11 Core)
+        print_f("[BEACON] Synchronizing global entry points...")
+        self.orchestrator.update_local_bootstrap()
+        
+        # 2. Identity & Network
+        lan_ip = self.conf.get("node", "lan_ip") or "0.0.0.0" 
+        p2p_port = 60000 
+        
+        listen_addr = Multiaddr(f"/ip4/{lan_ip}/tcp/{p2p_port}")
+        
+        self.host = new_host()
+        node_id = self.host.get_id().to_string()
+        
+        async with self.host.run(listen_addrs=[listen_addr]):
+            full_addr = f"/ip4/{lan_ip}/tcp/{p2p_port}/p2p/{node_id}"
             
-        print_f(f"[LIGHTHOUSE] ID: {node_id}")
-        print_f(f"[LIGHTHOUSE] Listening on: {full_addr}")
-        print_f("[LIGHTHOUSE] Status: ONLINE. Awaiting mesh connections...")
-        
-        # The lighthouse just stays alive to provide a stable peer for others to dial.
-        # libp2p handles the 'Relay' and 'Identify' logic internally once connected.
-        await trio.sleep_forever()
+            # Save address for local discovery fallback
+            with open(BEACON_ADDR_FILE, "w") as f:
+                f.write(full_addr)
+                
+            print_f(f"[BEACON] Local ID: {node_id}")
+            print_f(f"[BEACON] Public/LAN Address: {full_addr}")
+            print_f("[BEACON] Status: ACTIVE. Bridging local mesh to global backbone.")
+            
+            # 3. Optional: Reach out to other seeds to form a backbone
+            # (In a real setup, we would dial peers from bootstrap_list.json here)
+            
+            await trio.sleep_forever()
+
+async def main():
+    beacon = BootstrapBeacon()
+    await beacon.start()
 
 if __name__ == "__main__":
     try:
@@ -54,4 +67,4 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         if os.path.exists(BEACON_ADDR_FILE): os.remove(BEACON_ADDR_FILE)
     except Exception as e:
-        print_f(f"[ERROR] Lighthouse: {e}")
+        print_f(f"[ERROR] Beacon Crash: {e}")

@@ -1,5 +1,10 @@
-import torch
+try:
+    import torch
+    HAS_ML = True
+except ImportError:
+    HAS_ML = False
 import psutil
+import os
 try:
     import GPUtil
 except ImportError:
@@ -11,28 +16,40 @@ class EfficiencyMonitor:
     """
     Quantifies the 'Solarpunk Advantage' of Neuromorphic SNNs.
     Converts Joules into tangible human metrics.
-    Also handles Thermal Guarding (Task #12) for the Laptop.
+    Also handles Thermal Guarding and Resource Quotas (Task #8).
     """
-    def __init__(self, cpu_threshold=85.0, gpu_threshold=80.0):
+    def __init__(self, 
+                 cpu_threshold=85.0, 
+                 gpu_threshold=80.0, 
+                 max_cpu_pct=50.0, 
+                 max_ram_mb=2048):
         self.cpu_threshold = cpu_threshold
         self.gpu_threshold = gpu_threshold
+        self.max_cpu_pct = max_cpu_pct
+        self.max_ram_mb = max_ram_mb
+        
         self.ENERGY_MAC_DENSE = 3.1  # Picojoules (pJ)
         self.ENERGY_SPIKE_ADD = 0.1  # pJ
+        
+        # Conversion Constants
+        self.J_PER_PHONE_CHARGE_MIN = 60.0 # 1 minute of charging ~60 Joules
+        self.J_PER_LED_SEC = 9.0           # 9W LED bulb uses 9 Joules/sec
 
-    def check_thermal_health(self) -> Dict:
+    def check_node_health(self) -> Dict:
         """
-        Returns True if the node is within safe thermal and memory limits.
-        Task #22: Added VRAM Pressure Sensor.
+        Comprehensive health check including thermal and resource quotas (Task #8).
         """
         vitals = {
             "cpu_temp": 0.0, 
             "gpu_temp": 0.0, 
             "vram_used_pct": 0.0,
+            "process_cpu_pct": 0.0,
+            "process_ram_mb": 0.0,
             "is_safe": True, 
             "reason": "OK"
         }
         
-        # 1. CPU Temperature (Laptop-critical)
+        # 1. Thermal Checks
         try:
             temps = psutil.sensors_temperatures()
             if 'coretemp' in temps:
@@ -45,12 +62,27 @@ class EfficiencyMonitor:
             vitals["is_safe"] = False
             vitals["reason"] = f"CPU_OVERHEAT ({vitals['cpu_temp']}C)"
 
-        # 2. GPU Temperature & VRAM Pressure
+        # 2. Resource Quotas (Task #8)
+        try:
+            process = psutil.Process(os.getpid())
+            vitals["process_cpu_pct"] = process.cpu_percent(interval=0.1)
+            vitals["process_ram_mb"] = process.memory_info().rss / (1024 * 1024)
+            
+            if vitals["process_cpu_pct"] > self.max_cpu_pct:
+                vitals["is_safe"] = False
+                vitals["reason"] = f"QUOTA_CPU_EXCEEDED ({vitals['process_cpu_pct']:.1f}%)"
+            
+            if vitals["process_ram_mb"] > self.max_ram_mb:
+                vitals["is_safe"] = False
+                vitals["reason"] = f"QUOTA_RAM_EXCEEDED ({vitals['process_ram_mb']:.1f}MB)"
+        except Exception: pass
+
+        # 3. GPU Checks
         if GPUtil:
             try:
                 gpus = GPUtil.getGPUs()
                 if gpus:
-                    gpu = gpus[0] # Assuming primary GPU
+                    gpu = gpus[0]
                     vitals["gpu_temp"] = gpu.temperature
                     vitals["vram_used_pct"] = gpu.memoryUtil * 100
                     
@@ -58,7 +90,7 @@ class EfficiencyMonitor:
                         vitals["is_safe"] = False
                         vitals["reason"] = f"GPU_OVERHEAT ({vitals['gpu_temp']}C)"
                     
-                    if vitals["vram_used_pct"] > 90.0: # VRAM Pressure threshold
+                    if vitals["vram_used_pct"] > 90.0:
                         vitals["is_safe"] = False
                         vitals["reason"] = f"VRAM_PRESSURE ({vitals['vram_used_pct']:.1f}%)"
             except Exception: pass
@@ -78,7 +110,6 @@ class EfficiencyMonitor:
         energy_saved_pj = energy_dense_pj - energy_snn_pj
         joules_saved = energy_saved_pj / 1e12
         
-        # Human Tangibles
         phone_mins = joules_saved / self.J_PER_PHONE_CHARGE_MIN
         led_secs = joules_saved / self.J_PER_LED_SEC
         
@@ -90,9 +121,9 @@ class EfficiencyMonitor:
         }
 
 if __name__ == "__main__":
-    monitor = EfficiencyMonitor()
-    # Mock a large 80B shard inference (massive synapse count)
-    # 80B total params, let's say 1M params per shard
-    stats = monitor.calculate_savings(1000, 1000, 1000, actual_spikes=5000)
-    print(f"Efficiency: {stats['reduction_pct']}%")
-    print(f"Tangible: Saved {stats['led_bulb_secs']} seconds of LED light per inference.")
+    # Test Resource Quota Trigger
+    monitor = EfficiencyMonitor(max_ram_mb=10) # Set very low to trigger quota
+    health = monitor.check_node_health()
+    print(f"Health Check: {'✅' if health['is_safe'] else '❌'}")
+    print(f"Status: {health['reason']}")
+    print(f"RAM Usage: {health['process_ram_mb']:.1f}MB")

@@ -1,1 +1,0 @@
-{"node_id": "SENDER_PROBE", "shards": [{"model_name": "Synapse-1.0", "layer_start": 6, "layer_end": 10, "node_id": "SENDER_PROBE", "node_ip": "127.0.0.1", "vram_usage_gb": 0.5, "is_ready": true}], "last_seen": 198779.72131514063}

@@ -16,3 +16,4 @@ matplotlib
 nvidia-ml-py3
 psutil
 python-dotenv
+zeroconf

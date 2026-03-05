@@ -1,1 +1,0 @@
-{"node_id": "NODE_A", "shards": [{"model_name": "Synapse-1.0", "layer_start": 0, "layer_end": 5, "node_id": "NODE_A", "vram_usage_gb": 1.0, "is_ready": true}], "last_seen": 251153.01515868283}

@@ -2,10 +2,16 @@
     "node_name": "PC_MASTER",
     "shards": [
         {
-            "model_name": "Synapse-1.0",
+            "model_name": "Llama-3-8B-BitNet",
             "layer_start": 0,
-            "layer_end": 20,
-            "vram_usage_gb": 4.5
+            "layer_end": 5,
+            "vram_usage_gb": 2.5
+        },
+        {
+            "model_name": "Llama-3-8B-BitNet",
+            "layer_start": 26,
+            "layer_end": 31,
+            "vram_usage_gb": 2.5
         }
     ],
     "lan_ip": "192.168.68.51"

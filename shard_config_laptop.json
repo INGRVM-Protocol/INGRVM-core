@@ -1,0 +1,16 @@
+{
+    "node_name": "LAPTOP_RELAY",
+    "shards": [
+        {
+            "model_name": "Llama-3-8B-BitNet",
+            "layer_start": 6,
+            "layer_end": 25,
+            "vram_usage_gb": 1.5
+        }
+    ],
+<<<<<<< Updated upstream
+    "lan_ip": "127.0.0.1"
+=======
+    "lan_ip": "192.168.68.51"
+>>>>>>> Stashed changes
+}

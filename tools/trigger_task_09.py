@@ -7,7 +7,7 @@ import time
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from spike_protocol import NeuralSpike, send_spike_raw
 
-HUB_IP = "127.0.0.1" 
+HUB_IP = "192.168.68.51" 
 PORT = 60005
 
 async def trigger_async():
@@ -19,6 +19,7 @@ async def trigger_async():
         synapse_id="Synapse-1.0",
         node_id="TRIGGER_TOOL",
         current_layer=0,
+        model_name="Llama-3-8B-BitNet",
         input_hash="0xDEADBEEF",
         ttl=50
     )

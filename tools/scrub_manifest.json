@@ -1,0 +1,22 @@
+{
+    "exclude_extensions": [
+        ".env",
+        ".key",
+        ".pem",
+        ".crt"
+    ],
+    "exclude_directories": [
+        "__pycache__",
+        ".git",
+        "node_modules",
+        "venv",
+        "neuromorphic_env",
+        ".next"
+    ],
+    "regex_patterns": [
+        "(?i)api_key\\s*=\\s*['\\\"][a-zA-Z0-9_-]+['\\\"]",
+        "(?i)password\\s*=\\s*['\\\"][^'\\\"]+['\\\"]",
+        "(?i)secret\\s*=\\s*['\\\"][^'\\\"]+['\\\"]",
+        "ghp_[a-zA-Z0-9]{36}"
+    ]
+}

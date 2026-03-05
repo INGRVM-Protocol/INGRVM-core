@@ -18,8 +18,16 @@ class PipelineRouter:
         Returns: (destination_type, target_node_id)
         destination_type: "LOCAL", "PEER", or "END" (if model finished)
         """
+        def get_attr(obj, key, default=None):
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
+        model_name = get_attr(spike, "model_name", "Synapse-1.0")
+        current_layer = get_attr(spike, "current_layer", 0)
+
         # 1. Is this node responsible for the NEXT layer?
-        next_hop = self.shard_mgr.find_next_hop(spike.model_name, spike.current_layer)
+        next_hop = self.shard_mgr.find_next_hop(model_name, current_layer)
         
         if next_hop == "LOCAL":
             return "LOCAL", None
@@ -85,8 +93,8 @@ async def test_router():
     
     # Mock finding a peer for layer 6
     mgr.mesh_shards["PEER_B"] = [
-        # ModelShard dataclass mock
-        type('Shard', (), {'model_name': "Synapse-1.0", 'layer_start': 6, 'layer_end': 10})
+        # Use the actual dataclass for consistent test behavior
+        ModelShard(model_name="Synapse-1.0", layer_start=6, layer_end=10, node_id="PEER_B")
     ]
     
     spike.current_layer = 5 # Finished layer 5

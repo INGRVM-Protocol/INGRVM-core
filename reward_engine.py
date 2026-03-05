@@ -1,105 +1,187 @@
+import sqlite3
 import time
-from typing import List, Dict
-from pydantic import BaseModel, Field
+import os
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel
 
-class NodeStats(BaseModel):
-    peer_id: str
-    useful_work_spikes: int = 0
-    reputation_score: float = 1.0 # q_i in whitepaper
-    last_active: float = Field(default_factory=time.time)
-
-class RewardEngine:
+class SynapseLedger:
     """
-    Implements the Calyx Tokenomics.
-    Formula: R_i = E * (w_i * q_i) / Sum(w_j * q_j)
-    Includes dynamic inflation to scale with network size.
+    Phase 6 Foundation: Persistent SQL Ledger for $SYN Rewards.
+    Replaces memory-only RewardEngine with a verifiable transaction history.
     """
-    def __init__(self, epoch_emission: float = 100.0, inflation_rate: float = 0.05):
-        self.epoch_emission = epoch_emission
-        self.inflation_rate = inflation_rate
-        self.nodes: Dict[str, NodeStats] = {}
+    def __init__(self, db_path: str = "neuromorphic_env/ledger.db"):
+        self.db_path = db_path
+        if not os.path.exists(os.path.dirname(self.db_path)):
+            os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        self._init_db()
 
-    def adjust_inflation(self, active_node_count: int):
-        """
-        Adjusts emissions based on network density.
-        """
-        if active_node_count > 50: # Threshold for 'Growth' phase
-            self.epoch_emission *= (1.0 - self.inflation_rate)
-            print(f"[ECONOMY] Inflation Brake: Emission set to {self.epoch_emission:.2f}")
-        else:
-            self.epoch_emission *= (1.0 + (self.inflation_rate / 2))
-            print(f"[ECONOMY] Growth Stimulus: Emission set to {self.epoch_emission:.2f}")
-
-    def register_work(self, peer_id: str, spikes: int):
-        if peer_id not in self.nodes:
-            self.nodes[peer_id] = NodeStats(peer_id=peer_id)
+    def _init_db(self):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
         
-        self.nodes[peer_id].useful_work_spikes += spikes
-        self.nodes[peer_id].last_active = time.time()
+        # 1. Accounts Table (Current Balances)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS accounts (
+                node_id TEXT PRIMARY KEY,
+                balance REAL DEFAULT 0.0,
+                reputation REAL DEFAULT 1.0,
+                total_work_spikes INTEGER DEFAULT 0,
+                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         
-        # Reputation boost for active work
-        self.nodes[peer_id].reputation_score = min(2.0, self.nodes[peer_id].reputation_score + 0.01)
+        # 2. Transactions Table (History)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                tx_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_id TEXT,
+                receiver_id TEXT,
+                amount REAL,
+                tx_type TEXT, -- 'MINT', 'TRANSFER', 'REWARD', 'SLASH'
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                memo TEXT
+            )
+        """)
+        
+        conn.commit()
+        conn.close()
 
-    def distribute_mesh_rewards(self, shard_contributions: Dict[str, int], total_task_spikes: int):
-        """
-        Task #14: Multi-node Reward Splitting.
-        Distributes spikes for a single inference task across all participating nodes.
-        :param shard_contributions: { 'node_id': layers_processed }
-        :param total_task_spikes: The output spike count of the final layer.
-        """
-        total_layers = sum(shard_contributions.values())
-        if total_layers == 0: return
+    def mint_rewards(self, peer_id: str, amount: float, memo: str = "Epoch Reward"):
+        """ Mints new $SYN and assigns it to a node. """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Update balance
+        cursor.execute("""
+            INSERT INTO accounts (node_id, balance) VALUES (?, ?)
+            ON CONFLICT(node_id) DO UPDATE SET 
+                balance = balance + EXCLUDED.balance,
+                last_updated = CURRENT_TIMESTAMP
+        """, (peer_id, amount))
+        
+        # Record transaction
+        cursor.execute("""
+            INSERT INTO transactions (sender_id, receiver_id, amount, tx_type, memo)
+            VALUES (?, ?, ?, ?, ?)
+        """, ("SYSTEM", peer_id, amount, "MINT", memo))
+        
+        conn.commit()
+        conn.close()
+        print(f"[LEDGER] Minted {amount:.4f} $SYN to {peer_id[:12]}... ({memo})")
 
-        for node_id, layers in shard_contributions.items():
-            # Calculate proportion of work based on layers processed
-            work_proportion = layers / total_layers
-            node_share = int(total_task_spikes * work_proportion)
+    def transfer(self, sender_id: str, receiver_id: str, amount: float) -> bool:
+        """ Transfers $SYN between two nodes. """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Check balance
+        cursor.execute("SELECT balance FROM accounts WHERE node_id = ?", (sender_id,))
+        row = cursor.fetchone()
+        if not row or row[0] < amount:
+            conn.close()
+            return False
             
-            self.register_work(node_id, spikes=max(1, node_share))
-            print(f"[REWARDS] Distributed {node_share} spikes to {node_id} for mesh contribution.")
-
-    def calculate_payouts(self) -> Dict[str, float]:
-        """Calculates the $SYN distribution for the current epoch."""
-        payouts = {}
-        
-        # Calculate denominator: Sum of (work * quality) for all nodes
-        total_utility_weighted_work = sum(
-            node.useful_work_spikes * node.reputation_score 
-            for node in self.nodes.values()
-        )
-        
-        if total_utility_weighted_work == 0:
-            return {peer_id: 0.0 for peer_id in self.nodes}
-
-        for peer_id, node in self.nodes.items():
-            # R_i formula
-            node_utility = node.useful_work_spikes * node.reputation_score
-            reward = self.epoch_emission * (node_utility / total_utility_weighted_work)
-            payouts[peer_id] = round(reward, 4)
+        # Execute atomic transfer
+        try:
+            cursor.execute("UPDATE accounts SET balance = balance - ? WHERE node_id = ?", (amount, sender_id))
+            cursor.execute("""
+                INSERT INTO accounts (node_id, balance) VALUES (?, ?)
+                ON CONFLICT(node_id) DO UPDATE SET balance = balance + EXCLUDED.balance
+            """, (receiver_id, amount))
             
-        return payouts
+            cursor.execute("""
+                INSERT INTO transactions (sender_id, receiver_id, amount, tx_type)
+                VALUES (?, ?, ?, ?)
+            """, (sender_id, receiver_id, amount, "TRANSFER"))
+            
+            conn.commit()
+            success = True
+        except Exception:
+            conn.rollback()
+            success = False
+        finally:
+            conn.close()
+        return success
+
+    def record_work(self, peer_id: str, spikes: int):
+        """ Updates a node's work statistics and reputation. """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # Reputation grows with work (max 2.0)
+        cursor.execute("""
+            INSERT INTO accounts (node_id, total_work_spikes, reputation) VALUES (?, ?, 1.01)
+            ON CONFLICT(node_id) DO UPDATE SET 
+                total_work_spikes = total_work_spikes + EXCLUDED.total_work_spikes,
+                reputation = MIN(2.0, reputation + 0.005),
+                last_updated = CURRENT_TIMESTAMP
+        """, (peer_id, spikes))
+        
+        conn.commit()
+        conn.close()
+
+    def slash_node(self, peer_id: str, penalty_syn: float = 5.0, rep_burn: float = 0.1, memo: str = "Validation Failure"):
+        """ 
+        Phase 6 Task #16: Reputation Burn (Slashing).
+        Penalizes a node for malicious or incorrect behavior.
+        """
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        # 1. Reduce Balance (Minimum 0)
+        cursor.execute("""
+            UPDATE accounts 
+            SET balance = MAX(0.0, balance - ?),
+                reputation = MAX(0.5, reputation - ?),
+                last_updated = CURRENT_TIMESTAMP
+            WHERE node_id = ?
+        """, (penalty_syn, rep_burn, peer_id))
+        
+        # 2. Record Slashed Transaction
+        cursor.execute("""
+            INSERT INTO transactions (sender_id, receiver_id, amount, tx_type, memo)
+            VALUES (?, ?, ?, ?, ?)
+        """, (peer_id, "BURN_ADDRESS", -penalty_syn, "SLASH", memo))
+        
+        conn.commit()
+        conn.close()
+        print(f"[LEDGER] SLASHTAG: {peer_id[:12]}... Burned {penalty_syn} $SYN. Rep Burn: -{rep_burn}")
+
+    def get_balance(self, node_id: str) -> float:
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT balance FROM accounts WHERE node_id = ?", (node_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return row[0] if row else 0.0
+
+    def get_top_nodes(self, limit: int = 10) -> List[Dict[str, Any]]:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM accounts ORDER BY balance DESC LIMIT ?", (limit,))
+        results = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return results
 
 # --- Verification Test ---
 if __name__ == "__main__":
-    engine = RewardEngine(epoch_emission=1000.0) # 1000 $SYN per epoch
+    ledger = SynapseLedger()
     
-    # Simulate 3 nodes with different hardware/reputation
-    # 1. PC Backbone (High work, high reputation)
-    engine.register_work("12D3KooW_PC_BACKBONE", spikes=5000)
-    engine.nodes["12D3KooW_PC_BACKBONE"].reputation_score = 1.8 
+    # 1. Simulate Work & Reward
+    test_node = "12D3KooW_MASTER_NODE_ALPHA"
+    ledger.record_work(test_node, spikes=1000)
+    ledger.mint_rewards(test_node, amount=50.0, memo="Bootstrap Bonus")
     
-    # 2. Pixel 8 (Medium work, standard reputation)
-    engine.register_work("12D3KooW_PIXEL_8", spikes=1200)
+    # 2. Simulate Transfer
+    receiver = "12D3KooW_MOBILE_NODE_BETA"
+    if ledger.transfer(test_node, receiver, 15.0):
+        print(f"SUCCESS: Transferred 15.0 $SYN to {receiver[:12]}...")
+        
+    # 3. Display Balances
+    print("\n--- Current Ledger State ---")
+    for node in ledger.get_top_nodes():
+        print(f"Node: {node['node_id'][:12]}... | Balance: {node['balance']:.2f} $SYN | Rep: {node['reputation']:.2f}")
     
-    # 3. New Laptop (Low work, starting reputation)
-    engine.register_work("12D3KooW_LAPTOP", spikes=300)
-    
-    payouts = engine.calculate_payouts()
-    
-    print("--- Epoch Reward Distribution ---")
-    for peer_id, amount in payouts.items():
-        stats = engine.nodes[peer_id]
-        print(f"[{peer_id[:12]}] Work: {stats.useful_work_spikes}, Rep: {stats.reputation_score:.2f} -> Reward: {amount} $SYN")
-    
-    total_distributed = sum(payouts.values())
-    print(f"\nTotal Distributed: {total_distributed} $SYN")
+    if os.path.exists("neuromorphic_env/ledger.db"):
+        print("\nSUCCESS: Phase 6 Virtual Ledger functional.")

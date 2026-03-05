@@ -71,6 +71,14 @@ class SynapseConfig:
     def get(self, section: str, key: str) -> Any:
         return self.settings.get(section, {}).get(key)
 
+    def set(self, section: str, key: str, value: Any):
+        """ Task #15: Dynamically update a parameter and save to disk. """
+        if section not in self.settings:
+            self.settings[section] = {}
+        self.settings[section][key] = value
+        self.save()
+        print(f"[CONFIG] Parameter {section}.{key} updated to {value}")
+
 # --- Verification Test ---
 if __name__ == "__main__":
     conf = SynapseConfig()

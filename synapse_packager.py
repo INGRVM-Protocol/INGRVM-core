@@ -4,84 +4,142 @@ import hashlib
 import msgpack
 import torch
 import io
-from typing import Dict
+import sys
+import argparse
+import requests
+from typing import Dict, Optional
+from packaging import version
+from dotenv import load_dotenv
 
-class synapsePackage:
+# Load environment variables for Hub URL
+env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
+load_dotenv(env_path)
+
+HUB_URL = os.getenv("CALYX_HUB_URL", "http://127.0.0.1:8000")
+
+class SynapsePackager:
     """
-    Bundles SNN weights, architecture metadata, and integrity hashes 
+    Phase 6: Bundles SNN weights, architecture metadata, and semantic versioning
     into a single '.synapse' binary file for mesh distribution.
     """
-    def __init__(self, synapse_id: str):
-        self.synapse_id = synapse_id
+    def __init__(self):
+        pass
 
-    def create_package(self, model_weights_path: str, metadata: Dict, output_path: str):
-        print(f"[PACKAGER] Creating .synapse package for: {self.synapse_id}")
+    def create_package(self, synapse_id: str, weights_path: str, meta: Dict, output_dir: str) -> str:
+        """
+        Creates a .synapse package with semantic version validation.
+        """
+        # Validate Semantic Versioning (Task #9)
+        v_str = meta.get("version", "0.0.1")
+        try:
+            version.parse(v_str)
+        except version.InvalidVersion:
+            print(f"❌ ERROR: Invalid semantic version: {v_str}")
+            sys.exit(1)
+
+        print(f"[PACKAGER] Creating .synapse package: {synapse_id} v{v_str}")
         
-        # 1. Load weights as binary buffer
-        with open(model_weights_path, "rb") as f:
+        # 1. Load weights
+        if not os.path.exists(weights_path):
+            raise FileNotFoundError(f"Weights file not found: {weights_path}")
+            
+        with open(weights_path, "rb") as f:
             weights_bytes = f.read()
             
-        # 2. Calculate Hash for Integrity (The 'Genome' Fingerprint)
+        # 2. Calculate Integrity Hash
         integrity_hash = hashlib.sha256(weights_bytes).hexdigest()
-        metadata["integrity_hash"] = integrity_hash
+        meta["integrity_hash"] = integrity_hash
+        meta["synapse_id"] = synapse_id
         
-        # 3. Bundle everything with MessagePack
+        # 3. Bundle with MessagePack
         package_data = {
-            "synapse_id": self.synapse_id,
-            "metadata": metadata,
+            "synapse_id": synapse_id,
+            "version": v_str,
+            "metadata": meta,
             "weights": weights_bytes
         }
         
         binary_package = msgpack.packb(package_data, use_bin_type=True)
         
         # 4. Write to disk
+        filename = f"{synapse_id}_{v_str}.synapse"
+        output_path = os.path.join(output_dir, filename)
+        
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+            
         with open(output_path, "wb") as f:
             f.write(binary_package)
             
-        print(f"[PACKAGER] SUCCESS: {output_path} generated ({len(binary_package)} bytes)")
-        print(f"[PACKAGER] Fingerprint: {integrity_hash[:16]}")
+        print(f"✅ SUCCESS: {output_path} generated ({len(binary_package)} bytes)")
+        return output_path
 
-    def unpack_package(self, package_path: str) -> Dict:
-        """Unpacks a .synapse file and returns weights and metadata."""
+    def upload_to_marketplace(self, package_path: str):
+        """
+        Uploads the finished package to the PC Master Hub.
+        """
+        print(f"[PACKAGER] Uploading {package_path} to Marketplace at {HUB_URL}...")
+        
+        # We need to unpack briefly to get the metadata for the API params
         with open(package_path, "rb") as f:
             data = msgpack.unpackb(f.read(), raw=False)
-            
-        # Verify Integrity
-        weights = data["weights"]
-        metadata = data["metadata"]
-        current_hash = hashlib.sha256(weights).hexdigest()
         
-        if current_hash != metadata["integrity_hash"]:
-            raise ValueError("CRITICAL: synapse package integrity check failed! (Tampered Data)")
+        meta = data["metadata"]
+        params = {
+            "name": meta.get("name", data["synapse_id"]),
+            "author_id": meta.get("author_id", "ANON"),
+            "version": data["version"],
+            "category": meta.get("category", "General"),
+            "description": meta.get("description", ""),
+            "architecture": meta.get("architecture", "SNN")
+        }
+        
+        url = f"{HUB_URL}/api/marketplace/upload"
+        try:
+            with open(package_path, "rb") as f:
+                files = {"file": (os.path.basename(package_path), f, "application/octet-stream")}
+                response = requests.post(url, params=params, files=files)
             
-        print(f"[PACKAGER] Verified synapse: {data['synapse_id']}")
-        return data
+            if response.status_code == 200:
+                print(f"🚀 MARKETPLACE UPLOAD SUCCESS: {response.json()}")
+            else:
+                print(f"❌ UPLOAD FAILED: {response.status_code} - {response.text}")
+        except Exception as e:
+            print(f"❌ UPLOAD ERROR: {e}")
 
-# --- Verification Test ---
+def main():
+    parser = argparse.ArgumentParser(description="Calyx Synapse Packager CLI")
+    subparsers = parser.add_subparsers(dest="command")
+
+    # Create command
+    create_p = subparsers.add_parser("create", help="Bundle weights into a .synapse file")
+    create_p.add_argument("--id", required=True, help="Synapse ID (e.g. sentiment_alpha)")
+    create_p.add_argument("--weights", required=True, help="Path to .pt weights file")
+    create_p.add_argument("--ver", default="0.1.0", help="Semantic version (e.g. 1.2.3)")
+    create_p.add_argument("--name", help="Display name")
+    create_p.add_argument("--author", default="LAPTOP_RELAY", help="Author ID")
+    create_p.add_argument("--out", default="neuromorphic_env/packages", help="Output directory")
+    create_p.add_argument("--upload", action="store_true", help="Upload to Hub after creation")
+
+    args = parser.parse_args()
+
+    packager = SynapsePackager()
+
+    if args.command == "create":
+        meta = {
+            "name": args.name if args.name else args.id,
+            "author_id": args.author,
+            "version": args.ver,
+            "category": "Community",
+            "description": f"Packaged via CLI: {args.id}",
+            "architecture": "BitNet-1bit"
+        }
+        pkg_path = packager.create_package(args.id, args.weights, meta, args.out)
+        
+        if args.upload:
+            packager.upload_to_marketplace(pkg_path)
+    else:
+        parser.print_help()
+
 if __name__ == "__main__":
-    # Ensure directory exists
-    if not os.path.exists("neuromorphic_env/packages"):
-        os.makedirs("neuromorphic_env/packages")
-
-    packager = synapsePackage("synapse_0_sentiment")
-    
-    # Path to the untrained weights we created earlier
-    weights_in = "neuromorphic_env/synapses/synapse_0_untrained.pt"
-    pkg_out = "neuromorphic_env/packages/synapse_0.synapse"
-    
-    meta = {
-        "name": "Sentiment Alpha",
-        "author": "Architect",
-        "layers": "3-8-2",
-        "beta": 0.95
-    }
-    
-    # Pack
-    packager.create_package(weights_in, meta, pkg_out)
-    
-    # Unpack and Verify
-    try:
-        unpacked = packager.unpack_package(pkg_out)
-        print("SUCCESS: Package is portable and verified.")
-    except Exception as e:
-        print(f"Error: {e}")
+    main()

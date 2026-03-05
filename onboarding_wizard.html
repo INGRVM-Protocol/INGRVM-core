@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calyx | Onboarding</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0A0F0D; color: #E0E0E0; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        .bg-bark { background-color: rgba(74, 55, 40, 0.2); }
+        .text-gold { color: #FFD700; }
+        .text-chlorophyll { color: #2D6A4F; }
+        .step-inactive { opacity: 0.3; filter: grayscale(1); pointer-events: none; }
+        .gradient-border {
+            background: linear-gradient(to bottom, #2D6A4F, #FFD700);
+            padding: 1px;
+            border-radius: 1.5rem;
+        }
+        .inner-card {
+            background: #0A0F0D;
+            border-radius: 1.5rem;
+        }
+        @keyframes flow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .animate-flow {
+            background: linear-gradient(-45deg, #0A0F0D, #1a2e1a, #0A0F0D, #2d4a2d);
+            background-size: 400% 400%;
+            animation: flow 15s ease infinite;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen animate-flow">
+    
+    <div class="max-w-md w-full p-6">
+        <!-- HEADER -->
+        <div class="text-center mb-10">
+            <h1 class="text-4xl font-black text-chlorophyll tracking-tighter">CALYX_BOOT</h1>
+            <p class="text-[10px] text-gold uppercase tracking-widest mt-2">Neuromorphic Mesh Initialization</p>
+        </div>
+
+        <div class="gradient-border">
+            <div class="inner-card p-10 relative">
+                
+                <!-- STEP 1: IDENTITY -->
+                <div id="step1" class="space-y-6">
+                    <h2 class="text-xl font-bold text-mist uppercase">01_Identity</h2>
+                    <p class="text-xs text-mist/50 leading-relaxed">Every node in the Calyx mesh requires a unique cryptographic signature.</p>
+                    
+                    <div class="space-y-4 pt-4">
+                        <button onclick="generateId()" class="w-full bg-chlorophyll/20 border border-chlorophyll/40 py-4 rounded-xl text-chlorophyll font-bold hover:bg-chlorophyll/30 transition-all text-xs uppercase tracking-widest">Generate New Peer ID</button>
+                        <div class="relative">
+                            <input type="text" id="peerId" class="w-full bg-black/50 border border-mist/10 rounded-xl p-4 text-[10px] font-mono text-gold outline-none focus:border-gold" placeholder="OR PASTE EXISTING ID...">
+                        </div>
+                    </div>
+                    
+                    <button onclick="nextStep(2)" id="btnNext1" class="w-full bg-gold text-black font-black py-4 rounded-xl opacity-50 pointer-events-none uppercase tracking-widest mt-8">Proceed to Role Selection</button>
+                </div>
+
+                <!-- STEP 2: ROLE -->
+                <div id="step2" class="hidden space-y-6">
+                    <h2 class="text-xl font-bold text-mist uppercase">02_Role_Delegation</h2>
+                    <p class="text-xs text-mist/50">Select your hardware's primary function within the nervous system.</p>
+                    
+                    <div class="grid grid-cols-1 gap-4 pt-4">
+                        <div onclick="selectRole('MASTER')" class="role-card border border-mist/10 p-4 rounded-xl cursor-pointer hover:border-gold transition-all">
+                            <div class="text-xs font-bold text-gold">PC_MASTER</div>
+                            <div class="text-[8px] text-mist/40 mt-1">Orchestrator, Reward Ledger, Final Layer Shards.</div>
+                        </div>
+                        <div onclick="selectRole('RELAY')" class="role-card border border-mist/10 p-4 rounded-xl cursor-pointer hover:border-chlorophyll transition-all">
+                            <div class="text-xs font-bold text-chlorophyll">LAPTOP_RELAY</div>
+                            <div class="text-[8px] text-mist/40 mt-1">P2P Routing, Intermediate Shards, Network Bridge.</div>
+                        </div>
+                        <div onclick="selectRole('EDGE')" class="role-card border border-mist/10 p-4 rounded-xl cursor-pointer hover:border-mist/50 transition-all">
+                            <div class="text-xs font-bold text-mist">MOBILE_EDGE</div>
+                            <div class="text-[8px] text-mist/40 mt-1">Low-power Inference, Input Processing, Initial Layers.</div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex space-x-4 mt-8">
+                        <button onclick="prevStep(1)" class="w-1/3 border border-mist/10 text-mist/30 py-4 rounded-xl text-[10px] uppercase">Back</button>
+                        <button onclick="nextStep(3)" id="btnNext2" class="w-2/3 bg-gold text-black font-black py-4 rounded-xl opacity-50 pointer-events-none uppercase tracking-widest">Verify Hardware</button>
+                    </div>
+                </div>
+
+                <!-- STEP 3: CONNECTION -->
+                <div id="step3" class="hidden space-y-6">
+                    <h2 class="text-xl font-bold text-mist uppercase">03_Mesh_Link</h2>
+                    <p class="text-xs text-mist/50">Establishing connection to the PC Master Hub...</p>
+                    
+                    <div class="bg-black/40 p-6 rounded-xl border border-chlorophyll/20 space-y-4">
+                        <div class="flex justify-between items-center text-[10px]">
+                            <span class="text-mist/40">ZEROCONF_DISCOVERY</span>
+                            <span id="zcStatus" class="text-gold animate-pulse">SCANNING...</span>
+                        </div>
+                        <input type="text" id="hubIp" class="w-full bg-black/20 border border-mist/10 rounded-lg p-3 text-[10px] text-mist/60 font-mono" placeholder="MANUAL HUB IP (e.g. 192.168.x.x)">
+                    </div>
+                    
+                    <div class="flex space-x-4 mt-8">
+                        <button onclick="prevStep(2)" class="w-1/3 border border-mist/10 text-mist/30 py-4 rounded-xl text-[10px] uppercase">Back</button>
+                        <button onclick="finishOnboarding()" id="btnFinish" class="w-2/3 bg-chlorophyll text-mist font-black py-4 rounded-xl uppercase tracking-widest shadow-lg shadow-chlorophyll/20">Initialize Node</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- FOOTER PROGRESS -->
+        <div class="flex justify-center space-x-2 mt-8">
+            <div id="dot1" class="w-2 h-2 rounded-full bg-chlorophyll"></div>
+            <div id="dot2" class="w-2 h-2 rounded-full bg-mist/10"></div>
+            <div id="dot3" class="w-2 h-2 rounded-full bg-mist/10"></div>
+        </div>
+    </div>
+
+    <script>
+        let selectedRole = null;
+
+        function generateId() {
+            const mockId = "12D3KooW" + Math.random().toString(36).substring(2, 15).toUpperCase();
+            document.getElementById('peerId').value = mockId;
+            enableNext(1);
+        }
+
+        document.getElementById('peerId').addEventListener('input', (e) => {
+            if(e.target.value.length > 10) enableNext(1);
+            else disableNext(1);
+        });
+
+        function selectRole(role) {
+            selectedRole = role;
+            document.querySelectorAll('.role-card').forEach(c => {
+                c.classList.remove('border-gold', 'border-chlorophyll', 'border-mist/50', 'bg-white/5');
+            });
+            event.currentTarget.classList.add('bg-white/5');
+            if(role === 'MASTER') event.currentTarget.classList.add('border-gold');
+            if(role === 'RELAY') event.currentTarget.classList.add('border-chlorophyll');
+            if(role === 'EDGE') event.currentTarget.classList.add('border-mist/50');
+            enableNext(2);
+        }
+
+        function enableNext(step) {
+            const btn = document.getElementById('btnNext' + step);
+            if(btn) {
+                btn.classList.remove('opacity-50', 'pointer-events-none');
+            }
+        }
+
+        function disableNext(step) {
+            const btn = document.getElementById('btnNext' + step);
+            if(btn) {
+                btn.classList.add('opacity-50', 'pointer-events-none');
+            }
+        }
+
+        function nextStep(n) {
+            document.querySelectorAll('[id^="step"]').forEach(s => s.classList.add('hidden'));
+            document.getElementById('step' + n).classList.remove('hidden');
+            
+            document.querySelectorAll('[id^="dot"]').forEach((d, i) => {
+                d.className = (i + 1 <= n) ? "w-2 h-2 rounded-full bg-chlorophyll" : "w-2 h-2 rounded-full bg-mist/10";
+            });
+
+            if(n === 3) startDiscovery();
+        }
+
+        function prevStep(n) {
+            nextStep(n);
+        }
+
+        async function startDiscovery() {
+            // Simulated Zeroconf find
+            setTimeout(() => {
+                document.getElementById('zcStatus').innerText = "FOUND: 192.168.68.51";
+                document.getElementById('zcStatus').classList.remove('text-gold', 'animate-pulse');
+                document.getElementById('zcStatus').classList.add('text-chlorophyll');
+                document.getElementById('hubIp').value = "192.168.68.51";
+            }, 2500);
+        }
+
+        function finishOnboarding() {
+            const peerId = document.getElementById('peerId').value;
+            localStorage.setItem('calyx_peer_id', peerId);
+            localStorage.setItem('calyx_role', selectedRole);
+            localStorage.setItem('calyx_hub_ip', document.getElementById('hubIp').value);
+            
+            // Redirect to main dashboard
+            window.location.href = "/";
+        }
+    </script>
+</body>
+</html>

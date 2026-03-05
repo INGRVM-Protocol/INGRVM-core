@@ -34,6 +34,7 @@ class ShardManager:
         
         self.local_shards: List[ModelShard] = []
         self.mesh_shards: Dict[str, List[ModelShard]] = {} # node_id -> shards
+        self.relay_addrs: Dict[str, str] = {} # node_id -> relay_multiaddr (Task #04)
         self.file_spike_queue = None # Set by neural_node
         
         if not os.path.exists(self.discovery_dir):
@@ -54,10 +55,10 @@ class ShardManager:
                 ip = config.get("lan_ip", "127.0.0.1")
                 for s in config.get("shards", []):
                     self.register_shard(
-                        model_name=s["model_name"],
-                        start=s["layer_start"],
-                        end=s["layer_end"],
-                        vram_gb=s["vram_usage_gb"],
+                        model_name=s.get("model_name", "Synapse-1.0"),
+                        start=s.get("layer_start", 0),
+                        end=s.get("layer_end", 0),
+                        vram_gb=s.get("vram_usage_gb", 0.0),
                         ip=ip
                     )
                 print(f"[SHARD] Loaded {len(self.local_shards)} shards from {path}")
@@ -127,7 +128,14 @@ class ShardManager:
                             if current_time - last_seen > 3600:
                                 continue
                             sender_id = data["node_id"]
-                            shards = [ModelShard(**s) for s in data["shards"]]
+                            # Task #10: Ensure we handle both dict and dataclass formats during Phase 5/6 transition
+                            shards = []
+                            for s in data["shards"]:
+                                if isinstance(s, dict):
+                                    shards.append(ModelShard(**s))
+                                else:
+                                    shards.append(s)
+                            
                             self.mesh_shards[sender_id] = shards
                             discovered_nodes.append(sender_id)
                     except Exception: pass
@@ -210,20 +218,58 @@ class ShardManager:
         except Exception:
             pass
 
-    def find_next_hop(self, model_name: str, current_layer: int) -> Optional[str]:
-        target_layer = current_layer + 1
+    def get_peer_ip(self, node_id: str) -> Optional[str]:
+        """ Returns the last known IP for a mesh node. """
+        if node_id in self.mesh_shards and self.mesh_shards[node_id]:
+            return self.mesh_shards[node_id][0].node_ip
+        return None
+
+    def get_peer_multiaddr(self, node_id: str) -> Optional[str]:
+        """ 
+        Returns a libp2p multiaddr for the node.
+        Supports direct LAN and Circuit Relay v2 (Task #04).
+        """
+        ip = self.get_peer_ip(node_id)
+        if not ip: return None
         
+        # If we have a public relay address for this node, use it (WAN)
+        if node_id in self.relay_addrs:
+            return self.relay_addrs[node_id]
+            
+        # Default to direct TCP (LAN)
+        return f"/ip4/{ip}/tcp/60001"
+
+    def request_relay_reservation(self, relay_node_id: str, relay_instance):
+        """
+        Requests a persistent slot on a public Relay.
+        """
+        public_path = relay_instance.request_reservation(self.node_id)
+        if public_path:
+            self.relay_addrs[self.node_id] = public_path
+            # Re-broadcast our identity with the new public path
+            self._write_local_discovery_file()
+            print(f"[SHARD] Node is now GLOBALLY reachable via {relay_node_id[:8]}")
+
+    def find_next_hop(self, model_name: str, current_layer: int, look_for_current: bool = False) -> Optional[str]:
+        target_layer = current_layer if look_for_current else current_layer + 1
+        
+        # Helper to get attributes robustly
+        def get_attr(obj, key, default=None):
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
         # 1. Check local shards first
         for shard in self.local_shards:
-            if shard.is_ready and shard.model_name == model_name and \
-               shard.layer_start <= target_layer <= shard.layer_end:
+            if get_attr(shard, "is_ready") and get_attr(shard, "model_name") == model_name and \
+               get_attr(shard, "layer_start", 0) <= target_layer <= get_attr(shard, "layer_end", 0):
                 return "LOCAL"
 
         # 2. Check mesh shards
         for node_id, shards in self.mesh_shards.items():
             for shard in shards:
-                if shard.is_ready and shard.model_name == model_name and \
-                   shard.layer_start <= target_layer <= shard.layer_end:
+                if get_attr(shard, "is_ready") and get_attr(shard, "model_name") == model_name and \
+                   get_attr(shard, "layer_start", 0) <= target_layer <= get_attr(shard, "layer_end", 0):
                     return node_id
         return None
 

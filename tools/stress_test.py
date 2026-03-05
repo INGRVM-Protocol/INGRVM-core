@@ -1,59 +1,69 @@
-import torch
-import time
-import sys
+import trio
 import os
+import sys
+import time
+from dotenv import load_dotenv
 
-# Add parent dir to path for imports
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from tools.hardware_monitor import HardwareProtector
-from quantization import BinaryLinear
+# Import the core spike logic
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(__file__))))
+from spike_protocol import NeuralSpike, generate_task_id, hash_input
 
-def run_stress_test(duration_secs=60):
-    """
-    Calyx Stress Test: Pushes the 1080 Ti to its thermal limit with 1-bit 'Crush' operations.
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    monitor = HardwareProtector(temp_limit=85)
-    
-    print(f"🔥 --- Calyx Stress Test (1-bit / {duration_secs}s) ---")
-    print(f"Targeting: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
-    
-    # Setup large 1-bit layer
-    dim = 8192
-    binary_layer = BinaryLinear(dim, dim).to(device)
-    input_data = torch.randn((256, dim)).to(device)
-    
-    start_time = time.time()
-    iter_count = 0
+# Load environment variables
+env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
+load_dotenv(env_path)
+
+# Ensure this matches the Laptop Relay's listening port
+RAW_PORT = 60005
+TARGET_IP = "192.168.68.53" # Laptop JadeEnvy IP based on previous mail
+
+# If we want to dynamically discover, we could use lan_discovery, 
+# but hardcoding for a targeted stress test is more reliable.
+
+async def fire_spike(spike_id: int):
+    """ Fires a single spike at the Laptop Relay. """
+    spike = NeuralSpike(
+        task_id=generate_task_id("PC_MASTER", f"stress_{spike_id}"),
+        synapse_id="sentiment_alpha",
+        node_id="PC_MASTER",
+        input_hash=hash_input(f"Stress Test Pulse {spike_id}")
+    )
+    # Simulate a raw input spike starting at Layer 0 (Mobile's domain, but we're testing routing)
+    spike.current_layer = 0 
+    spike.set_spikes([1, 0, 1, 1, 0])
     
     try:
-        while time.time() - start_time < duration_secs:
-            # 1. Check Hardware Safeguard
-            safe, msg = monitor.check_safeguards()
-            if not safe:
-                print(f"
-🛑 SHUTDOWN: {msg}")
-                break
+        async with await trio.open_tcp_stream(TARGET_IP, RAW_PORT) as stream:
+            await stream.send_all(spike.to_bin())
+            print(f"[SPIKE {spike_id}] Dispatched to {TARGET_IP}:{RAW_PORT}")
             
-            # 2. Run Heavy 1-bit Matmul
-            _ = binary_layer(input_data)
-            
-            # 3. Report every 50 iterations
-            if iter_count % 50 == 0:
-                vitals = monitor.get_gpu_vitals()
-                if vitals:
-                    print(f"⏳ {int(time.time() - start_time)}s | Temp: {vitals['temp']}°C | Load: {vitals['load']}% | VRAM: {vitals['vram_used']:.0f}MB", end='')
-            
-            iter_count += 1
-            
-        print("
+            # Wait briefly for an ACK or Routing Confirmation
+            with trio.fail_after(2):
+                resp_data = await stream.receive_some(4096)
+                if resp_data:
+                    print(f"[SPIKE {spike_id}] ACK received.")
+    except trio.TooSlowError:
+        print(f"[SPIKE {spike_id}] Timeout - Node busy processing.")
+    except Exception as e:
+        print(f"[SPIKE {spike_id}] Failed: {e}")
 
-✅ Stress test completed successfully.")
-        print(f"Total Iterations: {iter_count}")
-        
-    except KeyboardInterrupt:
-        print("
-🛑 Stress test interrupted by user.")
+async def run_stress_test(num_spikes=50):
+    """ Fires a barrage of spikes to test Nursery and Gatekeeper resilience. """
+    print(f"--- [PHASE 5] MESH STRESS TEST INITIATED ---")
+    print(f"Targeting Node: {TARGET_IP}:{RAW_PORT}")
+    print(f"Payload: {num_spikes} concurrent spikes\n")
+    
+    start_time = time.time()
+    
+    async with trio.open_nursery() as nursery:
+        for i in range(num_spikes):
+            nursery.start_soon(fire_spike, i)
+            # Add a tiny delay to prevent local socket exhaustion
+            await trio.sleep(0.05)
+            
+    duration = time.time() - start_time
+    print(f"\n--- [TEST COMPLETE] ---")
+    print(f"Dispatched {num_spikes} spikes in {duration:.2f} seconds.")
+    print(f"Check the Dashboard or Laptop logs to verify successful routing.")
 
 if __name__ == "__main__":
-    run_stress_test()
+    trio.run(run_stress_test, 100) # Start with 100 spikes

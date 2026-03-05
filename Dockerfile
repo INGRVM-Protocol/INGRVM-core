@@ -1,37 +1,44 @@
-# Calyx Node: Docker Environment
-# Optimized for Neuromorphic Spiking Neural Networks (SNNs)
+# Calyx Hub: Production Environment
+# Optimized for Neuromorphic Mesh Orchestration (Phase 7)
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
-ENV CALYX_HOME /app
+# --- Environment Configuration ---
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    CALYX_HOME=/app \
+    CALYX_HUB_HOST=0.0.0.0 \
+    CALYX_HUB_PORT=8000 \
+    CALYX_LOG_PATH=/app/data/logs/node_activity.jsonl
 
-# Set working directory
+# --- Working Directory ---
 WORKDIR $CALYX_HOME
 
-# Install system dependencies
+# --- System Dependencies ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libssl-dev \
     libffi-dev \
-    libgmp-dev \
     cmake \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
+# --- Python Dependencies ---
+# Note: We use a specific hub-requirements set to avoid heavy CUDA/Torch 
+# dependencies if running on a standard cloud CPU instance.
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir fastapi uvicorn zeroconf python-dotenv psutil pydantic requests
 
-# Copy the Calyx source code
+# --- Application Setup ---
 COPY . .
 
-# Expose P2P and API ports
-# Default P2P: 60001 | Discovery: 60002 | API: 8000
-EXPOSE 60001 60002 8000
+# Create persistent data directories for SQLite and Logs
+RUN mkdir -p /app/data/logs /app/neuromorphic_env /app/synapses
 
-# Default command to run the master node
-# In production, we'd use the phoenix_supervisor.py
-CMD ["python", "master_node.py"]
+# --- Mesh Connectivity ---
+# API: 8000 | P2P: 60001 | Zeroconf: 5353
+EXPOSE 8000 60001 5353/udp
+
+# --- Launch Sequence ---
+# Using the Hub Server as the entry point for orchestrators
+CMD ["python", "hub_server.py"]
